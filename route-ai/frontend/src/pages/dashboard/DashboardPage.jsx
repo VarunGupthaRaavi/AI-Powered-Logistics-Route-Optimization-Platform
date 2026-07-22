@@ -1,0 +1,1 @@
+import React from 'react'; export default function DashboardPage() { return <div className='p-4'><h1 className='text-2xl font-bold'>Operations Dashboard</h1><p className='text-slate-400 mt-2'>Real-time fleet telemetry & active route dispatch monitor.</p></div>; }
