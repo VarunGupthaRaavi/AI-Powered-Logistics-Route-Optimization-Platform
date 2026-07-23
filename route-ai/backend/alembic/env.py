@@ -4,6 +4,7 @@ from sqlalchemy import pool
 from alembic import context
 from app.config.settings import settings
 from app.database.base import Base
+import app.models  # noqa: F401 - registers all mapped tables with Base.metadata
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
