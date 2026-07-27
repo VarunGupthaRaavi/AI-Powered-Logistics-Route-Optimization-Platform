@@ -5,6 +5,11 @@ from typing import Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import (
+    DuplicateRecordException,
+    EntityNotFoundException,
+    IllegalStateTransitionException,
+)
 from app.repositories.delivery_repository import delivery_repository
 from app.schemas.delivery import (
     DeliveryCreate,
@@ -40,7 +45,7 @@ class DeliveryService:
             new_status: Desired target delivery status string.
 
         Raises:
-            HTTPException: 400 Bad Request if state transition is illegal according to business rules.
+            IllegalStateTransitionException: 400 Bad Request if state transition is illegal.
         """
         curr = current_status.lower()
         target = new_status.lower()
@@ -50,9 +55,10 @@ class DeliveryService:
 
         allowed_targets = self.ALLOWED_TRANSITIONS.get(curr, set())
         if target not in allowed_targets:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Illegal status transition from '{current_status}' to '{new_status}'. Allowed transitions from '{current_status}': {', '.join(sorted(allowed_targets)) or 'None (Terminal state)'}",
+            raise IllegalStateTransitionException(
+                current_status=current_status,
+                target_status=new_status,
+                allowed_targets=allowed_targets,
             )
 
     def create_delivery(self, db: Session, create_data: DeliveryCreate) -> DeliveryResponse:
@@ -66,9 +72,8 @@ class DeliveryService:
             DeliveryResponse schema.
 
         Raises:
-            HTTPException: 409 Conflict if active duplicate order already exists.
+            DuplicateRecordException: 409 Conflict if active duplicate order already exists.
         """
-        # Business Validation: Duplicate Order Detection
         duplicate = delivery_repository.find_duplicate_delivery(
             db,
             customer_id=create_data.customer_id,
@@ -76,9 +81,8 @@ class DeliveryService:
             drop_location=create_data.drop_location,
         )
         if duplicate:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"An active delivery order (ID #{duplicate.delivery_id}) already exists for this customer with identical pickup and drop-off locations.",
+            raise DuplicateRecordException(
+                detail=f"An active delivery order (ID #{duplicate.delivery_id}) already exists for this customer with identical pickup and drop-off locations."
             )
 
         payload = create_data.model_dump()
@@ -91,10 +95,7 @@ class DeliveryService:
         """Fetch delivery details by primary key ID."""
         delivery = delivery_repository.get_by_id(db, delivery_id)
         if not delivery:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Delivery with ID {delivery_id} was not found.",
-            )
+            raise EntityNotFoundException(entity_name="Delivery", entity_id=delivery_id)
         return DeliveryResponse.model_validate(delivery)
 
     def list_deliveries(
@@ -160,14 +161,10 @@ class DeliveryService:
         """Update fields on an existing delivery order with FSM transition validation."""
         delivery = delivery_repository.get_by_id(db, delivery_id)
         if not delivery:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Delivery with ID {delivery_id} was not found.",
-            )
+            raise EntityNotFoundException(entity_name="Delivery", entity_id=delivery_id)
 
         changes = update_data.model_dump(exclude_unset=True)
 
-        # Business Validation: FSM Status Transition Rules
         if "delivery_status" in changes and changes["delivery_status"]:
             new_status = changes["delivery_status"].lower()
             if new_status not in self.VALID_STATUSES:
@@ -176,7 +173,6 @@ class DeliveryService:
                     detail=f"Invalid delivery status '{new_status}'. Allowed values: {', '.join(sorted(self.VALID_STATUSES))}",
                 )
 
-            # Validate permitted transition
             self.validate_status_transition(delivery.delivery_status, new_status)
 
         updated_delivery = delivery_repository.update_delivery(db, delivery, changes)
@@ -186,10 +182,7 @@ class DeliveryService:
         """Delete a delivery order by ID."""
         delivery = delivery_repository.get_by_id(db, delivery_id)
         if not delivery:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Delivery with ID {delivery_id} was not found.",
-            )
+            raise EntityNotFoundException(entity_name="Delivery", entity_id=delivery_id)
 
         delivery_repository.delete_delivery(db, delivery)
         return {"message": f"Delivery {delivery_id} successfully deleted."}

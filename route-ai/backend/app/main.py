@@ -1,15 +1,20 @@
 """Main FastAPI application module for RouteAI platform."""
 
-from fastapi import FastAPI, Request, status
-from fastapi.encoders import jsonable_encoder
+from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.router import api_router
 from app.config.settings import settings
+from app.core.error_handlers import (
+    http_exception_handler,
+    sqlalchemy_exception_handler,
+    unhandled_exception_handler,
+    validation_exception_handler,
+)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -32,26 +37,11 @@ app.add_middleware(
 # Include API Router
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
-
-@app.exception_handler(StarletteHTTPException)
-async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    """Global handler for HTTP exceptions ensuring consistent JSON response structure."""
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail},
-    )
-
-
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """Global handler for request validation errors."""
-    return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={
-            "detail": "Request validation failed",
-            "errors": jsonable_encoder(exc.errors()),
-        },
-    )
+# Register Global Exception Handlers
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(SQLAlchemyError, sqlalchemy_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 
 
 def custom_openapi():
