@@ -22,6 +22,29 @@ class DeliveryRepository:
         stmt = select(Delivery).where(Delivery.delivery_id == delivery_id)
         return db.scalar(stmt)
 
+    def find_duplicate_delivery(
+        self, db: Session, customer_id: int, pickup_location: str, drop_location: str
+    ) -> Optional[Delivery]:
+        """Check for active duplicate order with identical customer, pickup, and drop location.
+
+        Args:
+            db: Database session.
+            customer_id: Customer ID integer.
+            pickup_location: Pickup address string.
+            drop_location: Drop-off address string.
+
+        Returns:
+            Existing Delivery ORM object if active duplicate exists, None otherwise.
+        """
+        stmt = select(Delivery).where(
+            Delivery.customer_id == customer_id,
+            func.lower(Delivery.pickup_location) == pickup_location.lower(),
+            func.lower(Delivery.drop_location) == drop_location.lower(),
+            Delivery.delivery_status.in_(["pending", "scheduled", "assigned", "in_transit"]),
+        )
+        return db.scalar(stmt)
+
+
     def list_deliveries(
         self,
         db: Session,

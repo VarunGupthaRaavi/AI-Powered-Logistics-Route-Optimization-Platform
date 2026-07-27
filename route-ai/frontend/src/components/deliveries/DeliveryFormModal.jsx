@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Package, MapPin, Weight, Tag, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Package, MapPin, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function DeliveryFormModal({ isOpen, onClose, onSubmit, delivery = null, isLoading = false }) {
   const isEditMode = !!delivery;
@@ -13,7 +13,8 @@ export default function DeliveryFormModal({ isOpen, onClose, onSubmit, delivery 
     delivery_status: 'pending',
   });
 
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState({});
+  const [globalError, setGlobalError] = useState('');
 
   useEffect(() => {
     if (delivery) {
@@ -35,10 +36,45 @@ export default function DeliveryFormModal({ isOpen, onClose, onSubmit, delivery 
         delivery_status: 'pending',
       });
     }
-    setError('');
+    setErrors({});
+    setGlobalError('');
   }, [delivery, isOpen]);
 
   if (!isOpen) return null;
+
+  const validateForm = () => {
+    const newErrors = {};
+
+    // 1. Pickup Location Validation
+    if (!formData.pickup_location || formData.pickup_location.trim().length < 3) {
+      newErrors.pickup_location = 'Pickup location must be at least 3 characters long.';
+    }
+
+    // 2. Drop Location Validation
+    if (!formData.drop_location || formData.drop_location.trim().length < 3) {
+      newErrors.drop_location = 'Drop-off destination must be at least 3 characters long.';
+    }
+
+    // 3. Cross-field Validation: Identical addresses check
+    if (
+      formData.pickup_location &&
+      formData.drop_location &&
+      formData.pickup_location.trim().toLowerCase() === formData.drop_location.trim().toLowerCase()
+    ) {
+      newErrors.drop_location = 'Drop-off destination cannot be identical to pickup location.';
+    }
+
+    // 4. Package Weight Validation
+    const weight = parseFloat(formData.package_weight);
+    if (isNaN(weight) || weight <= 0) {
+      newErrors.package_weight = 'Package weight must be greater than 0 kg.';
+    } else if (weight > 1000) {
+      newErrors.package_weight = 'Package weight cannot exceed 1000 kg.';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -46,19 +82,19 @@ export default function DeliveryFormModal({ isOpen, onClose, onSubmit, delivery 
       ...prev,
       [name]: name === 'customer_id' || name === 'package_weight' ? parseFloat(value) || value : value,
     }));
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: '' }));
+    }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.pickup_location.trim() || !formData.drop_location.trim()) {
-      setError('Pickup and drop-off locations are required.');
+    setGlobalError('');
+
+    if (!validateForm()) {
       return;
     }
-    if (formData.package_weight <= 0) {
-      setError('Package weight must be greater than 0 kg.');
-      return;
-    }
-    setError('');
+
     onSubmit(formData);
   };
 
@@ -90,10 +126,10 @@ export default function DeliveryFormModal({ isOpen, onClose, onSubmit, delivery 
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && (
+          {globalError && (
             <div className="flex items-center space-x-2 p-3 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{error}</span>
+              <span>{globalError}</span>
             </div>
           )}
 
@@ -108,7 +144,7 @@ export default function DeliveryFormModal({ isOpen, onClose, onSubmit, delivery 
                 required
                 value={formData.customer_id}
                 onChange={handleChange}
-                className="w-full px-3.5 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="w-full px-3.5 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
@@ -118,11 +154,17 @@ export default function DeliveryFormModal({ isOpen, onClose, onSubmit, delivery 
                 name="package_weight"
                 step="0.1"
                 min="0.1"
+                max="1000"
                 required
                 value={formData.package_weight}
                 onChange={handleChange}
-                className="w-full px-3.5 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className={`w-full px-3.5 py-2.5 bg-slate-950/60 border rounded-xl text-slate-100 text-sm focus:outline-none ${
+                  errors.package_weight ? 'border-rose-500' : 'border-slate-800 focus:border-indigo-500'
+                }`}
               />
+              {errors.package_weight && (
+                <p className="mt-1 text-[11px] text-rose-400">{errors.package_weight}</p>
+              )}
             </div>
           </div>
 
@@ -138,9 +180,14 @@ export default function DeliveryFormModal({ isOpen, onClose, onSubmit, delivery 
                 placeholder="e.g. Central Depot Hub, Hyderabad"
                 value={formData.pickup_location}
                 onChange={handleChange}
-                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className={`w-full pl-10 pr-3.5 py-2.5 bg-slate-950/60 border rounded-xl text-slate-100 text-sm focus:outline-none ${
+                  errors.pickup_location ? 'border-rose-500' : 'border-slate-800 focus:border-indigo-500'
+                }`}
               />
             </div>
+            {errors.pickup_location && (
+              <p className="mt-1 text-[11px] text-rose-400">{errors.pickup_location}</p>
+            )}
           </div>
 
           {/* Drop Location */}
@@ -155,9 +202,14 @@ export default function DeliveryFormModal({ isOpen, onClose, onSubmit, delivery 
                 placeholder="e.g. Hitec City Phase 2, Hyderabad"
                 value={formData.drop_location}
                 onChange={handleChange}
-                className="w-full pl-10 pr-3.5 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className={`w-full pl-10 pr-3.5 py-2.5 bg-slate-950/60 border rounded-xl text-slate-100 text-sm focus:outline-none ${
+                  errors.drop_location ? 'border-rose-500' : 'border-slate-800 focus:border-indigo-500'
+                }`}
               />
             </div>
+            {errors.drop_location && (
+              <p className="mt-1 text-[11px] text-rose-400">{errors.drop_location}</p>
+            )}
           </div>
 
           {/* Priority & Status */}
@@ -168,7 +220,7 @@ export default function DeliveryFormModal({ isOpen, onClose, onSubmit, delivery 
                 name="priority"
                 value={formData.priority}
                 onChange={handleChange}
-                className="w-full px-3.5 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="w-full px-3.5 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
               >
                 <option value="low">Low</option>
                 <option value="normal">Normal</option>
@@ -184,7 +236,7 @@ export default function DeliveryFormModal({ isOpen, onClose, onSubmit, delivery 
                   name="delivery_status"
                   value={formData.delivery_status}
                   onChange={handleChange}
-                  className="w-full px-3.5 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  className="w-full px-3.5 py-2.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 text-sm focus:outline-none focus:border-indigo-500"
                 >
                   <option value="pending">Pending</option>
                   <option value="scheduled">Scheduled</option>
@@ -198,7 +250,7 @@ export default function DeliveryFormModal({ isOpen, onClose, onSubmit, delivery 
             )}
           </div>
 
-          {/* Buttons */}
+          {/* Action Buttons */}
           <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
             <button
               type="button"
