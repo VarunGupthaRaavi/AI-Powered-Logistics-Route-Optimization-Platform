@@ -38,9 +38,9 @@ class Settings(BaseSettings):
         except Exception as error:
             raise ValueError("DATABASE_URL must be a valid SQLAlchemy URL") from error
 
-        if driver_name not in {"postgresql", "postgresql+psycopg2"}:
+        if driver_name not in {"postgresql", "postgresql+psycopg2", "sqlite"}:
             raise ValueError(
-                "DATABASE_URL must use the postgresql or postgresql+psycopg2 driver"
+                "DATABASE_URL must use postgresql, postgresql+psycopg2, or sqlite driver"
             )
         return value
 
