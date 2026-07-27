@@ -39,20 +39,32 @@ def create_delivery(
     "",
     response_model=DeliveryListResponse,
     status_code=status.HTTP_200_OK,
-    summary="List paginated delivery orders",
-    description="Fetch a paginated collection of deliveries with optional status and customer_id filters.",
+    summary="List paginated, searched, filtered, and sorted delivery orders",
+    description="Fetch a paginated collection of deliveries with optional search term, status, priority, customer_id, and sort options.",
 )
 def list_deliveries(
     page: int = Query(1, ge=1, description="Page number starting from 1"),
-    size: int = Query(20, ge=1, le=100, description="Page size limit (max 100)"),
-    delivery_status: Optional[str] = Query(None, alias="status", description="Filter by status (e.g. pending, in_transit)"),
+    limit: int = Query(20, ge=1, le=100, alias="limit", description="Number of items per page (max 100)"),
+    status: Optional[str] = Query(None, description="Filter by status (e.g., Pending, In_Transit, Delivered)"),
+    priority: Optional[str] = Query(None, description="Filter by priority (e.g., Low, Normal, High, Urgent)"),
+    search: Optional[str] = Query(None, description="Search term matching pickup or drop locations"),
     customer_id: Optional[int] = Query(None, description="Filter by customer ID"),
+    sort: str = Query("created_at", description="Field to sort by: created_at, package_weight, priority, delivery_id"),
+    order: str = Query("desc", pattern="^(asc|desc|ASC|DESC)$", description="Sort direction: asc or desc"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> DeliveryListResponse:
-    """Retrieve paginated list of deliveries."""
+    """Retrieve paginated, searched, filtered, and sorted list of deliveries."""
     return delivery_service.list_deliveries(
-        db, page=page, size=size, delivery_status=delivery_status, customer_id=customer_id
+        db,
+        page=page,
+        limit=limit,
+        delivery_status=status,
+        priority=priority,
+        customer_id=customer_id,
+        search=search,
+        sort=sort,
+        order=order,
     )
 
 

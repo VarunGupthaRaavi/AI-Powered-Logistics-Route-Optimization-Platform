@@ -85,39 +85,53 @@ def test_create_delivery_unauthorized(client: TestClient, db: Session):
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
-def test_list_deliveries_with_filters(client: TestClient, db: Session):
-    """Test GET /api/v1/deliveries returns paginated list with optional status filtering."""
+def test_list_deliveries_with_search_filter_and_sort(client: TestClient, db: Session):
+    """Test GET /api/v1/deliveries with search, priority filtering, and dynamic sorting."""
     customer = create_test_customer(db)
     headers = create_auth_header(db)
 
-    # Seed two deliveries
-    payload1 = {
+    # Seed three deliveries
+    p1 = {
         "customer_id": customer.customer_id,
-        "pickup_location": "Hub A",
-        "drop_location": "Destination 1",
-        "package_weight": 10.0,
+        "pickup_location": "Hyderabad Central Depot",
+        "drop_location": "Gachibowli Tech Park, Hyderabad",
+        "package_weight": 5.0,
+        "priority": "urgent",
     }
-    payload2 = {
+    p2 = {
         "customer_id": customer.customer_id,
-        "pickup_location": "Hub B",
-        "drop_location": "Destination 2",
-        "package_weight": 20.0,
+        "pickup_location": "Bengaluru Warehouse",
+        "drop_location": "Whitefield Hub, Bengaluru",
+        "package_weight": 25.0,
+        "priority": "normal",
     }
-    client.post("/api/v1/deliveries", json=payload1, headers=headers)
-    client.post("/api/v1/deliveries", json=payload2, headers=headers)
+    p3 = {
+        "customer_id": customer.customer_id,
+        "pickup_location": "Hyderabad Outer Ring Road Depot",
+        "drop_location": "Hitec City, Hyderabad",
+        "package_weight": 15.0,
+        "priority": "urgent",
+    }
+    client.post("/api/v1/deliveries", json=p1, headers=headers)
+    client.post("/api/v1/deliveries", json=p2, headers=headers)
+    client.post("/api/v1/deliveries", json=p3, headers=headers)
 
-    # List all deliveries
-    response = client.get("/api/v1/deliveries?page=1&size=10", headers=headers)
-    assert response.status_code == status.HTTP_200_OK
-    data = response.json()
-    assert data["total"] >= 2
-    assert data["page"] == 1
-    assert len(data["items"]) >= 2
+    # 1. Test Search for "Hyderabad"
+    res_search = client.get("/api/v1/deliveries?search=Hyderabad", headers=headers)
+    assert res_search.status_code == status.HTTP_200_OK
+    assert res_search.json()["total"] == 2
 
-    # Filter by status pending
-    res_filtered = client.get("/api/v1/deliveries?status=pending", headers=headers)
-    assert res_filtered.status_code == status.HTTP_200_OK
-    assert res_filtered.json()["total"] >= 2
+    # 2. Test Priority Filter "urgent"
+    res_priority = client.get("/api/v1/deliveries?priority=urgent", headers=headers)
+    assert res_priority.status_code == status.HTTP_200_OK
+    assert res_priority.json()["total"] == 2
+
+    # 3. Test Sorting by package_weight asc
+    res_sort = client.get("/api/v1/deliveries?sort=package_weight&order=asc", headers=headers)
+    assert res_sort.status_code == status.HTTP_200_OK
+    items = res_sort.json()["items"]
+    weights = [item["package_weight"] for item in items]
+    assert weights == sorted(weights)
 
 
 def test_get_delivery_by_id_success_and_not_found(client: TestClient, db: Session):
